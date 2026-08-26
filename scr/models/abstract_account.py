@@ -1,9 +1,10 @@
 import uuid
-from abc import abstractmethod, ABC
+from abc import ABC
 from dataclasses import field, dataclass
 from decimal import Decimal
 
 from scr.enums.account_status import AccountStatus
+from scr.enums.account_type import AccountType
 from scr.exceptions.account_closed_error import AccountClosedError
 from scr.exceptions.account_frozen_error import AccountFrozenError
 from scr.exceptions.insufficient_funds_error import InsufficientFundsError
@@ -14,6 +15,7 @@ from scr.exceptions.invalid_operation_error import InvalidOperationError
 class AbstractAccount(ABC):
     first_name: str
     last_name: str
+    type: AccountType
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     status: AccountStatus = AccountStatus.ACTIVE
     balance: Decimal = field(default=Decimal('0.00'), repr=False)
@@ -31,9 +33,14 @@ class AbstractAccount(ABC):
             raise InsufficientFundsError()
         self.balance = new_balance
 
-    @abstractmethod
-    def get_account_info(self):
-        ...
+    def get_account_info(self) -> dict:
+        return {
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "id": self.id,
+            "status": self.status,
+            "balance": self.balance,
+        }
 
     def _validate_status(self):
         if self.status == AccountStatus.CLOSED:
