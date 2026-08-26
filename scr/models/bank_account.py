@@ -21,7 +21,6 @@ class BankAccount(AbstractAccount):
     def get_account_info(self) -> dict:
         info = super().get_account_info()
         info.update({
-            "type": self.type,
             "currency": self.currency.value,
         })
         return info

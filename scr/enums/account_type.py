@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class AccountType(Enum):
     BANK_ACCOUNT = "BankAccount"
     SAVINGS_ACCOUNT = "SavingsAccount"

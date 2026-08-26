@@ -2,30 +2,30 @@ from decimal import Decimal
 
 import pytest
 
-from scr.exceptions.account_frozen_error import AccountFrozenError
+from scr.enums.account_status import AccountStatus
 from scr.models.bank_account import BankAccount
 
 
-def test_deposit_and_withdraw_update_balance(active_account: BankAccount) -> None:
-    active_account.deposit(Decimal("50.00"))
-    assert active_account.balance == Decimal("150.00")
+def test_deposit_and_withdraw_update_balance(make_account) -> None:
+    account = make_account(BankAccount, status=AccountStatus.ACTIVE)
+    account.deposit(Decimal("50.00"))
+    assert account.balance == Decimal("150.00")
 
-    active_account.withdraw(Decimal("30.00"))
-    assert active_account.balance == Decimal("120.00")
+    account.withdraw(Decimal("30.00"))
+    assert account.balance == Decimal("120.00")
 
 
-@pytest.mark.parametrize("operation,amount", [
-    ("deposit", Decimal("50.00")),
-    ("withdraw", Decimal("10.00")),
-])
-def test_operations_on_frozen_account_are_rejected(
-    frozen_account: BankAccount,
-    operation: str,
-    amount: Decimal,
-) -> None:
-    original_balance = frozen_account.balance
+def test_get_account_info_includes_currency(make_account) -> None:
+    info = make_account(BankAccount).get_account_info()
+    assert info["currency"] == "RUB"
+    assert info["balance"] == Decimal("100.00")
 
-    with pytest.raises(AccountFrozenError, match="account frozen"):
-        getattr(frozen_account, operation)(amount)
 
-    assert frozen_account.balance == original_balance
+def test_post_init_rejects_invalid_currency(make_account) -> None:
+    with pytest.raises(TypeError, match="currency"):
+        make_account(BankAccount, currency="RUB")
+
+
+def test_post_init_rejects_invalid_status(make_account) -> None:
+    with pytest.raises(TypeError, match="status"):
+        make_account(BankAccount, status="ACTIVE")

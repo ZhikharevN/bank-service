@@ -38,6 +38,7 @@ class AbstractAccount(ABC):
             "first_name": self.first_name,
             "last_name": self.last_name,
             "id": self.id,
+            "type": self.type,
             "status": self.status,
             "balance": self.balance,
         }
@@ -47,4 +48,3 @@ class AbstractAccount(ABC):
             raise AccountClosedError()
         elif self.status == AccountStatus.FROZEN:
             raise AccountFrozenError()
-
