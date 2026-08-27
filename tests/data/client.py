@@ -10,7 +10,7 @@ def make_client():
             "first_name": "Ivan",
             "last_name": "Petrov",
             "surname": "Ivanovich",
-            "accounts": accounts if accounts is not None else [],
+            "accounts": list(accounts) if accounts is not None else [],
             "phone": "79001234567",
             "email": "ivan@test.com",
             "age": 25,

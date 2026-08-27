@@ -1,22 +1,27 @@
 from dataclasses import dataclass, field
-from datetime import datetime, time
 from decimal import Decimal
 
 from scr.enums.account_status import AccountStatus
 from scr.enums.client_status import ClientStatus
+from scr.enums.currency import Currency
+from scr.enums.transaction_type import TransactionType
 from scr.exceptions.client_blocked_error import ClientBlockedError
-from scr.exceptions.night_operations_error import NightOperationsError
 from scr.models.abstract_account import AbstractAccount
 from scr.models.client import Client
-from scr.models.suspicious_action import SuspiciousAction
+from scr.models.transaction import Transaction
+from scr.services.transaction_processor import TransactionProcessor
+from scr.services.transaction_queue import TransactionQueue
 
 
 @dataclass
 class Bank:
     clients: list[Client] = field(default_factory=list)
-    NIGHT_START = time(0, 0)
-    NIGHT_END = time(5, 0)
-    SUSPICIOUS_AMOUNT = Decimal("100000")
+    queue: TransactionQueue = field(default_factory=TransactionQueue)
+    fx_rates: dict[tuple[Currency, Currency], Decimal] = field(default_factory=dict)
+    processor: TransactionProcessor = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.processor = TransactionProcessor(queue=self.queue, rates=self.fx_rates)
 
     def add_client(self, client: Client):
         self.clients.append(client)
@@ -59,60 +64,81 @@ class Bank:
             total_balance += account.balance
         return total_balance
 
-    def execute_deposit(
+    def submit_deposit(
         self,
         client: Client,
         account: AbstractAccount,
         amount: Decimal,
-    ) -> None:
-        self._prepare_operation(client, account, amount, "deposit")
-        account.deposit(amount)
-
-    def execute_withdraw(
-        self,
-        client: Client,
-        account: AbstractAccount,
-        amount: Decimal,
-    ) -> None:
-        self._prepare_operation(client, account, amount, "withdraw")
-        account.withdraw(amount)
-
-    def _prepare_operation(
-        self,
-        client: Client,
-        account: AbstractAccount,
-        amount: Decimal,
-        operation: str,
-    ) -> None:
-        if client.status == ClientStatus.BLOCKED:
-            raise ClientBlockedError()
-        self._assert_operating_hours()
-        self._flag_if_suspicious(client, account, amount, operation)
-
-    def _assert_operating_hours(self) -> None:
-        current = datetime.now().time()
-        if self.NIGHT_START <= current < self.NIGHT_END:
-            raise NightOperationsError(str(self.NIGHT_START), str(self.NIGHT_END))
-
-    def _flag_if_suspicious(
-        self,
-        client: Client,
-        account: AbstractAccount,
-        amount: Decimal,
-        operation: str,
-    ) -> None:
-        reasons = []
-        if amount >= self.SUSPICIOUS_AMOUNT:
-            reasons.append("large amount")
-        if account.balance > Decimal("10000") and amount > account.balance / 2:
-            reasons.append("more than half of balance")
-        if not reasons:
-            return
-        client.suspicious_actions.append(
-            SuspiciousAction(
-                at=datetime.now(),
-                operation=operation,
-                amount=amount,
-                reason="; ".join(reasons),
-            )
+        *,
+        priority: int = 0,
+    ) -> Transaction:
+        tx = Transaction(
+            type=TransactionType.DEPOSIT,
+            sender=client,
+            receiver=client,
+            amount=amount,
+            currency=self._account_currency(account),
+            commission=Decimal("0"),
+            priority=priority,
+            receiver_account=account,
         )
+        self.queue.add(tx, priority)
+        return tx
+
+    def submit_withdraw(
+        self,
+        client: Client,
+        account: AbstractAccount,
+        amount: Decimal,
+        *,
+        priority: int = 0,
+    ) -> Transaction:
+        tx = Transaction(
+            type=TransactionType.WITHDRAW,
+            sender=client,
+            receiver=client,
+            amount=amount,
+            currency=self._account_currency(account),
+            commission=Decimal("0"),
+            priority=priority,
+            sender_account=account,
+        )
+        self.queue.add(tx, priority)
+        return tx
+
+    def submit_transfer(
+        self,
+        sender: Client,
+        sender_account: AbstractAccount,
+        receiver: Client,
+        receiver_account: AbstractAccount,
+        amount: Decimal,
+        *,
+        priority: int = 0,
+    ) -> Transaction:
+        tx = Transaction(
+            type=TransactionType.TRANSFER,
+            sender=sender,
+            receiver=receiver,
+            amount=amount,
+            currency=self._account_currency(sender_account),
+            commission=Decimal("0"),
+            priority=priority,
+            sender_account=sender_account,
+            receiver_account=receiver_account,
+        )
+        self.queue.add(tx, priority)
+        return tx
+
+    def cancel_transaction(self, transaction: Transaction) -> None:
+        self.queue.cancel(transaction)
+
+    def process_next(self) -> None:
+        self.processor.process_next()
+
+    @staticmethod
+    def _account_currency(account: AbstractAccount) -> Currency:
+        currency = getattr(account, "currency", None)
+        if not isinstance(currency, Currency):
+            raise TypeError("account has no currency")
+        return currency
