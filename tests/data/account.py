@@ -23,8 +23,6 @@ def make_account():
             **overrides,
     ) -> AbstractAccount:
         params = {
-            "first_name": "Ivan",
-            "last_name": "Petrov",
             "currency": Currency.RUB,
             "balance": Decimal("100.00"),
             "status": status,

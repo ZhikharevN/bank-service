@@ -13,8 +13,6 @@ from scr.exceptions.invalid_operation_error import InvalidOperationError
 
 @dataclass
 class AbstractAccount(ABC):
-    first_name: str
-    last_name: str
     type: AccountType
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     status: AccountStatus = AccountStatus.ACTIVE
@@ -35,8 +33,6 @@ class AbstractAccount(ABC):
 
     def get_account_info(self) -> dict:
         return {
-            "first_name": self.first_name,
-            "last_name": self.last_name,
             "id": self.id,
             "type": self.type,
             "status": self.status,

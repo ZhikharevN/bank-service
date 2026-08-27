@@ -26,5 +26,4 @@ class BankAccount(AbstractAccount):
         return info
 
     def __str__(self) -> str:
-        return (f"Type: {self.type}, name: {self.first_name}, last name: {self.last_name},"
-                f"status: {self.status}, balance: {self.balance}, currency: {self.currency}")
+        return f"Type: {self.type}, status: {self.status}, balance: {self.balance}, currency: {self.currency}"
