@@ -20,9 +20,24 @@ OPENING = datetime(2026, 1, 15, 5, 0)
 
 @pytest.fixture
 def frozen_now():
-    with patch("scr.services.transaction_processor.datetime") as mock_datetime:
-        mock_datetime.now.return_value = DAYTIME
-        yield mock_datetime.now
+    with (
+        patch("scr.services.risk_analyzer.datetime") as risk_dt,
+        patch("scr.services.transaction_processor.datetime") as proc_dt,
+    ):
+        risk_dt.now.return_value = DAYTIME
+        proc_dt.now.return_value = DAYTIME
+
+        class Clock:
+            @property
+            def return_value(self):
+                return risk_dt.now.return_value
+
+            @return_value.setter
+            def return_value(self, value):
+                risk_dt.now.return_value = value
+                proc_dt.now.return_value = value
+
+        yield Clock()
 
 
 def test_withdraw_in_daytime_updates_balance(make_account, make_client, frozen_now) -> None:
@@ -88,14 +103,11 @@ def test_large_withdraw_is_marked_suspicious(make_account, make_client, frozen_n
     account = make_account(BankAccount, balance=Decimal("200000.00"))
     client = make_client(accounts=[account])
     bank = Bank()
-    bank.submit_withdraw(client, account, Decimal("100000.00"))
+    tx = bank.submit_withdraw(client, account, Decimal("100000.00"))
     bank.process_next()
-    assert len(client.suspicious_actions) == 1
-    action = client.suspicious_actions[0]
-    assert action.operation == "withdraw"
-    assert action.amount == Decimal("100000.00")
-    assert action.at == DAYTIME
-    assert "large amount" in action.reason
+    assert tx in client.history
+    assert "large amount" in tx.suspicious_actions
+    assert tx.amount == Decimal("100000.00")
     assert account.balance == Decimal("99000.00")
 
 
@@ -105,10 +117,10 @@ def test_withdraw_of_more_than_half_large_balance_is_marked_suspicious(
     account = make_account(BankAccount, balance=Decimal("20000.00"))
     client = make_client(accounts=[account])
     bank = Bank()
-    bank.submit_withdraw(client, account, Decimal("12000.00"))
+    tx = bank.submit_withdraw(client, account, Decimal("12000.00"))
     bank.process_next()
-    assert len(client.suspicious_actions) == 1
-    assert "more than half of balance" in client.suspicious_actions[0].reason
+    assert tx in client.history
+    assert "more than half of balance" in tx.suspicious_actions
     assert account.balance == Decimal("7880.00")
 
 
@@ -116,9 +128,10 @@ def test_ordinary_withdraw_is_not_marked_suspicious(make_account, make_client, f
     account = make_account(BankAccount)
     client = make_client(accounts=[account])
     bank = Bank()
-    bank.submit_withdraw(client, account, Decimal("60.00"))
+    tx = bank.submit_withdraw(client, account, Decimal("60.00"))
     bank.process_next()
-    assert client.suspicious_actions == []
+    assert tx in client.history
+    assert tx.suspicious_actions == []
     assert account.balance == Decimal("39.40")
 
 
@@ -209,7 +222,9 @@ def test_submit_transfer_moves_funds_with_commission(
     sender = make_client(accounts=[source])
     receiver = make_client(accounts=[target], email="petr@test.com", account_number="ACC-002")
     bank = Bank()
-    bank.submit_transfer(sender, source, receiver, target, Decimal("40.00"))
+    tx = bank.submit_transfer(sender, source, receiver, target, Decimal("40.00"))
     bank.process_next()
+    assert tx in sender.history
+    assert "transfer to new account" in tx.suspicious_actions
     assert source.balance == Decimal("59.60")
     assert target.balance == Decimal("60.00")

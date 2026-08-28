@@ -1,8 +1,13 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from scr.enums.client_status import ClientStatus
 from scr.models.abstract_account import AbstractAccount
-from scr.models.suspicious_action import SuspiciousAction
+
+if TYPE_CHECKING:
+    from scr.models.transaction import Transaction
 
 
 @dataclass
@@ -18,7 +23,7 @@ class Client:
     password: str = field(repr=False)
     bad_entries: int = field(default=0)
     status: ClientStatus = field(default=ClientStatus.ACTIVE, init=False)
-    suspicious_actions: list[SuspiciousAction] = field(default_factory=list)
+    history: set[Transaction] = field(default_factory=set)
 
     def __post_init__(self):
         if self.age < 18:

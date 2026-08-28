@@ -17,8 +17,12 @@ DAYTIME = datetime(2026, 1, 15, 12, 0)
 
 @pytest.fixture(autouse=True)
 def daytime():
-    with patch("scr.services.transaction_processor.datetime") as mock_datetime:
-        mock_datetime.now.return_value = DAYTIME
+    with (
+        patch("scr.services.risk_analyzer.datetime") as risk_dt,
+        patch("scr.services.transaction_processor.datetime") as proc_dt,
+    ):
+        risk_dt.now.return_value = DAYTIME
+        proc_dt.now.return_value = DAYTIME
         yield
 
 

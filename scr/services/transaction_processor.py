@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
-from datetime import datetime, time
+from datetime import datetime
 from decimal import Decimal
 
+from scr.audit.audit_logger import audit_logger
 from scr.enums.client_status import ClientStatus
 from scr.enums.currency import Currency
 from scr.enums.transaction_status import TransactionStatus
@@ -14,9 +15,9 @@ from scr.exceptions.invalid_operation_error import InvalidOperationError
 from scr.exceptions.night_operations_error import NightOperationsError
 from scr.models.abstract_account import AbstractAccount
 from scr.models.client import Client
-from scr.models.suspicious_action import SuspiciousAction
 from scr.models.transaction import Transaction
 from scr.models.transaction_error import TransactionError
+from scr.services.risk_analyzer import RiskAnalyzer
 from scr.services.transaction_queue import TransactionQueue
 
 
@@ -24,11 +25,9 @@ from scr.services.transaction_queue import TransactionQueue
 class TransactionProcessor:
     queue: TransactionQueue
     rates: dict[tuple[Currency, Currency], Decimal] = field(default_factory=dict)
+    risk_analyzer: RiskAnalyzer = field(default_factory=RiskAnalyzer)
     max_attempts: int = 3
 
-    NIGHT_START = time(0, 0)
-    NIGHT_END = time(5, 0)
-    SUSPICIOUS_AMOUNT = Decimal("100000")
     _FATAL = (
         InsufficientFundsError,
         AccountFrozenError,
@@ -54,35 +53,50 @@ class TransactionProcessor:
             try:
                 self._apply(tx)
                 tx.status = TransactionStatus.COMPLETED
+                self.risk_analyzer.remember(tx)
+                audit_logger.info(
+                    f"{tx.type.value} completed id={tx.id} amount={tx.amount} "
+                    f"commission={tx.commission} {tx.currency.value}"
+                )
                 return tx
             except self._FATAL as error:
                 self._record_error(tx, attempt, error)
                 tx.status = TransactionStatus.REJECTED
+                audit_logger.error(
+                    f"{tx.type.value} rejected id={tx.id} amount={tx.amount} error={error}"
+                )
                 return tx
             except self._RETRYABLE as error:
                 self._record_error(tx, attempt, error)
+                audit_logger.warn(
+                    f"{tx.type.value} retry id={tx.id} attempt={attempt} error={error}"
+                )
         tx.status = TransactionStatus.REJECTED
+        audit_logger.error(
+            f"{tx.type.value} rejected id={tx.id} after {self.max_attempts} attempts"
+        )
         return tx
 
     def _apply(self, tx: Transaction) -> None:
         client, account = self._client_and_account(tx)
         if client.status == ClientStatus.BLOCKED:
             raise ClientBlockedError()
-        self._assert_operating_hours()
-        self._flag_if_suspicious(client, account, tx.amount, tx.type.value)
+        self.risk_analyzer.review(tx)
         tx.commission = (tx.amount * self._COMMISSION_RATE[tx.type]).quantize(Decimal("0.01"))
         match tx.type:
             case TransactionType.DEPOSIT:
+                tx.receiver.history.add(tx)
                 account.deposit(self._to_account(tx.amount, tx.currency, account))
             case TransactionType.WITHDRAW:
+                tx.sender.history.add(tx)
                 debit = tx.amount + tx.commission
                 account.withdraw(self._to_account(debit, tx.currency, account))
             case TransactionType.TRANSFER:
+                tx.receiver.history.add(tx)
+                tx.sender.history.add(tx)
                 target = self._require(tx.receiver_account, "receiver_account")
                 account.withdraw(self._to_account(tx.amount + tx.commission, tx.currency, account))
                 target.deposit(self._to_account(tx.amount, tx.currency, target))
-            case _:
-                raise InvalidOperationError()
 
     def _client_and_account(self, tx: Transaction) -> tuple[Client, AbstractAccount]:
         match tx.type:
@@ -92,34 +106,6 @@ class TransactionProcessor:
                 return tx.sender, self._require(tx.sender_account, "sender_account")
             case _:
                 raise InvalidOperationError()
-
-    def _assert_operating_hours(self) -> None:
-        current = datetime.now().time()
-        if self.NIGHT_START <= current < self.NIGHT_END:
-            raise NightOperationsError(str(self.NIGHT_START), str(self.NIGHT_END))
-
-    def _flag_if_suspicious(
-        self,
-        client: Client,
-        account: AbstractAccount,
-        amount: Decimal,
-        operation: str,
-    ) -> None:
-        reasons = []
-        if amount >= self.SUSPICIOUS_AMOUNT:
-            reasons.append("large amount")
-        if account.balance > Decimal("10000") and amount > account.balance / 2:
-            reasons.append("more than half of balance")
-        if not reasons:
-            return
-        client.suspicious_actions.append(
-            SuspiciousAction(
-                at=datetime.now(),
-                operation=operation,
-                amount=amount,
-                reason="; ".join(reasons),
-            )
-        )
 
     def _to_account(self, amount: Decimal, from_currency: Currency, account: AbstractAccount) -> Decimal:
         to_currency = getattr(account, "currency", None)

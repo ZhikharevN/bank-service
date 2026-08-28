@@ -1,4 +1,6 @@
+from datetime import datetime
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 
@@ -10,6 +12,19 @@ from scr.models.bank_account import BankAccount
 from scr.models.transaction import Transaction
 from scr.services.transaction_processor import TransactionProcessor
 from scr.services.transaction_queue import TransactionQueue
+
+DAYTIME = datetime(2026, 1, 15, 12, 0)
+
+
+@pytest.fixture(autouse=True)
+def daytime():
+    with (
+        patch("scr.services.risk_analyzer.datetime") as risk_dt,
+        patch("scr.services.transaction_processor.datetime") as proc_dt,
+    ):
+        risk_dt.now.return_value = DAYTIME
+        proc_dt.now.return_value = DAYTIME
+        yield
 
 
 def _tx(make_client, make_account, *, tx_type=TransactionType.DEPOSIT, amount=Decimal("30.00"), **overrides):

@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from scr.audit.audit_logger import audit_logger
 from scr.enums.account_status import AccountStatus
 from scr.enums.client_status import ClientStatus
 from scr.enums.currency import Currency
@@ -28,19 +29,29 @@ class Bank:
 
     @staticmethod
     def open_account(account: AbstractAccount):
-        account.status = AccountStatus.ACTIVE
+        Bank._set_account_status(account, AccountStatus.ACTIVE)
 
     @staticmethod
     def close_account(account: AbstractAccount):
-        account.status = AccountStatus.CLOSED
+        Bank._set_account_status(account, AccountStatus.CLOSED)
 
     @staticmethod
     def freeze_account(account: AbstractAccount):
-        account.status = AccountStatus.FROZEN
+        Bank._set_account_status(account, AccountStatus.FROZEN)
 
     @staticmethod
     def unfreeze_account(account: AbstractAccount):
-        account.status = AccountStatus.ACTIVE
+        Bank._set_account_status(account, AccountStatus.ACTIVE)
+
+    @staticmethod
+    def _set_account_status(account: AbstractAccount, status: AccountStatus) -> None:
+        previous = account.status
+        account.status = status
+        message = f"account {account.id} status {previous.value} -> {status.value}"
+        if status in (AccountStatus.CLOSED, AccountStatus.FROZEN):
+            audit_logger.warn(message)
+        else:
+            audit_logger.info(message)
 
     @staticmethod
     def authenticate_client(client: Client, password: str):
@@ -83,6 +94,9 @@ class Bank:
             receiver_account=account,
         )
         self.queue.add(tx, priority)
+        audit_logger.info(
+            f"deposit queued id={tx.id} account={account.id} amount={amount} {tx.currency.value}"
+        )
         return tx
 
     def submit_withdraw(
@@ -104,6 +118,9 @@ class Bank:
             sender_account=account,
         )
         self.queue.add(tx, priority)
+        audit_logger.info(
+            f"withdraw queued id={tx.id} account={account.id} amount={amount} {tx.currency.value}"
+        )
         return tx
 
     def submit_transfer(
@@ -128,10 +145,15 @@ class Bank:
             receiver_account=receiver_account,
         )
         self.queue.add(tx, priority)
+        audit_logger.info(
+            f"transfer queued id={tx.id} from={sender_account.id} to={receiver_account.id} "
+            f"amount={amount} {tx.currency.value}"
+        )
         return tx
 
     def cancel_transaction(self, transaction: Transaction) -> None:
         self.queue.cancel(transaction)
+        audit_logger.warn(f"transaction canceled id={transaction.id} type={transaction.type.value}")
 
     def process_next(self) -> None:
         self.processor.process_next()
