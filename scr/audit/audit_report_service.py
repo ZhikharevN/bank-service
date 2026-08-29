@@ -12,11 +12,11 @@ class AuditReportService:
 
     @staticmethod
     def error_stats(bank: Bank) -> dict[str, list[Transaction]]:
-        return AuditReportService._group(bank, lambda tx: [error.message for error in tx.errors])
+        return AuditReportService.group(bank, lambda tx: [error.message for error in tx.errors])
 
     @staticmethod
     def suspicious_by_reason(bank: Bank) -> dict[str, list[Transaction]]:
-        return AuditReportService._group(bank, lambda tx: tx.suspicious_actions)
+        return AuditReportService.group(bank, lambda tx: tx.suspicious_actions)
 
     @staticmethod
     def _unique_transactions(bank: Bank) -> list[Transaction]:
@@ -27,7 +27,7 @@ class AuditReportService:
         return list(seen.values())
 
     @staticmethod
-    def _group(
+    def group(
         bank: Bank,
         keys_of: Callable[[Transaction], Iterable[str]],
     ) -> dict[str, list[Transaction]]:

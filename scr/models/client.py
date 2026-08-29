@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from scr.enums.client_status import ClientStatus
@@ -28,3 +29,6 @@ class Client:
     def __post_init__(self):
         if self.age < 18:
             raise ValueError("Age must be greater than or equal to 18")
+
+    def get_sum_balance(self) -> Decimal:
+        return sum((account.balance for account in self.accounts), Decimal("0"))
