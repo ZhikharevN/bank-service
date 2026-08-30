@@ -13,14 +13,15 @@ class SavingsAccount(BankAccount):
     type: AccountType = field(default=AccountType.SAVINGS_ACCOUNT, init=False)
 
     def apply_monthly_interest(self) -> None:
-        self.balance += self.balance * self.monthly_interest
+        self._validate_status()
+        self._balance += self.balance * self.monthly_interest
 
     def withdraw(self, amount):
         self._validate_status()
         new_balance = self.balance - amount
         if new_balance < self.min_balance:
             raise InsufficientFundsError()
-        self.balance = new_balance
+        self._balance = new_balance
 
     def get_account_info(self) -> dict:
         info = super().get_account_info()
@@ -32,4 +33,5 @@ class SavingsAccount(BankAccount):
 
     def __str__(self) -> str:
         return (f"Type: {self.type}, status: {self.status}, balance: {self.balance}, currency: {self.currency}, "
-                f"min_balance: {self.min_balance}, monthly_interest: {self.monthly_interest}")
+                f"min_balance: {self.min_balance}, monthly_interest: {self.monthly_interest}, " 
+                f"number: {self.number[-4:]}")

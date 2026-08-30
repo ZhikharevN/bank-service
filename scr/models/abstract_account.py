@@ -1,43 +1,42 @@
 import uuid
-from abc import ABC
+from abc import ABC, abstractmethod
 from dataclasses import field, dataclass
 from decimal import Decimal
+from itertools import count
 
 from scr.enums.account_status import AccountStatus
 from scr.enums.account_type import AccountType
 from scr.exceptions.account_closed_error import AccountClosedError
 from scr.exceptions.account_frozen_error import AccountFrozenError
-from scr.exceptions.insufficient_funds_error import InsufficientFundsError
-from scr.exceptions.invalid_operation_error import InvalidOperationError
 
+_numbers = count(1)
+
+def _account_number() -> str:
+    return f"{next(_numbers):012d}"
 
 @dataclass
 class AbstractAccount(ABC):
     type: AccountType
     id: uuid.UUID = field(default_factory=uuid.uuid4)
+    number: str = field(default_factory=_account_number)
     status: AccountStatus = AccountStatus.ACTIVE
-    balance: Decimal = field(default=Decimal('0.00'), init=False, repr=False)
+    _balance: Decimal = field(default=Decimal('0.00'), init=False, repr=False)
 
-    def deposit(self, amount):
-        self._validate_status()
-        if amount < 0:
-            raise InvalidOperationError()
-        self.balance += amount
+    @abstractmethod
+    def deposit(self, amount: Decimal):
+        ...
 
-    def withdraw(self, amount):
-        self._validate_status()
-        new_balance = self.balance - amount
-        if new_balance < 0:
-            raise InsufficientFundsError()
-        self.balance = new_balance
+    @abstractmethod
+    def withdraw(self, amount: Decimal):
+        ...
 
+    @abstractmethod
     def get_account_info(self) -> dict:
-        return {
-            "id": self.id,
-            "type": self.type,
-            "status": self.status,
-            "balance": self.balance,
-        }
+        ...
+
+    @property
+    def balance(self) -> Decimal:
+        return self._balance
 
     def _validate_status(self):
         if self.status == AccountStatus.CLOSED:

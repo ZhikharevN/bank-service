@@ -168,7 +168,8 @@ def test_authenticate_client_blocks_after_three_bad_passwords(make_client) -> No
     Bank.authenticate_client(client, "wrong")
     Bank.authenticate_client(client, "wrong")
     assert client.status == ClientStatus.ACTIVE
-    Bank.authenticate_client(client, "wrong")
+    with pytest.raises(ClientBlockedError):
+        Bank.authenticate_client(client, "wrong")
     assert client.status == ClientStatus.BLOCKED
 
     with pytest.raises(ClientBlockedError):
@@ -228,3 +229,16 @@ def test_submit_transfer_moves_funds_with_commission(
     assert "transfer to new account" in tx.suspicious_actions
     assert source.balance == Decimal("59.60")
     assert target.balance == Decimal("60.00")
+
+
+def test_high_risk_withdraw_is_rejected(make_account, make_client, frozen_now) -> None:
+    account = make_account(BankAccount, balance=Decimal("200000.00"))
+    client = make_client(accounts=[account])
+    bank = Bank()
+    tx = bank.submit_withdraw(client, account, Decimal("150000.00"))
+    bank.process_next()
+    assert tx.status == TransactionStatus.REJECTED
+    assert tx.risk_level.value == "high"
+    assert "large amount" in tx.suspicious_actions
+    assert tx not in client.history
+    assert account.balance == Decimal("200000.00")

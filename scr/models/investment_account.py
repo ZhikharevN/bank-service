@@ -27,7 +27,7 @@ class InvestmentAccount(BankAccount):
         position = self.positions.get(asset_type)
         if position is None or position.quantity < quantity:
             raise InsufficientFundsError()
-        self.balance += quantity * position.asset.current_price
+        self._balance += quantity * position.asset.current_price
         position.quantity -= quantity
 
     # Calculates the projected value of all assets after a specified number of years
@@ -59,4 +59,5 @@ class InvestmentAccount(BankAccount):
 
     def __str__(self) -> str:
         return (f"Type: {self.type}, status: {self.status}, balance: {self.balance}, currency: {self.currency}, "
-                f"positions: {self.positions}, balance with all actives: {self._get_balance_with_actives()}")
+                f"positions: {self.positions}, balance with all actives: {self._get_balance_with_actives()}, "
+                f"number: {self.number[-4:]}")

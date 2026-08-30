@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from scr.enums.currency import Currency
+from scr.enums.risk_level import RiskLevel
 from scr.enums.transaction_status import TransactionStatus
 from scr.enums.transaction_type import TransactionType
 from scr.models.abstract_account import AbstractAccount
@@ -24,6 +25,7 @@ class Transaction:
     sender_account: AbstractAccount | None = None
     receiver_account: AbstractAccount | None = None
     suspicious_actions: list[str] = field(default_factory=list)
+    risk_level: RiskLevel = RiskLevel.LOW
     status: TransactionStatus = field(default=TransactionStatus.CREATED, init=False)
     timestamp: datetime = field(default_factory=datetime.now)
     id: uuid.UUID = field(default_factory=uuid.uuid4)
@@ -31,3 +33,9 @@ class Transaction:
 
     def __hash__(self) -> int:
         return hash(self.id)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Transaction):
+            return NotImplemented
+        return self.id == other.id
+

@@ -63,6 +63,7 @@ class Bank:
 
         if client.bad_entries == 3:
             client.status = ClientStatus.BLOCKED
+            raise ClientBlockedError()
 
     @staticmethod
     def search_accounts(client: Client):

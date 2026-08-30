@@ -24,10 +24,24 @@ def make_account():
     ) -> AbstractAccount:
         params = {
             "currency": Currency.RUB,
-            "balance": Decimal("100.00"),
             "status": status,
         }
         params.update(overrides)
-        return cls(**params)
+        initial_balance = params.pop("balance", None)
+        requested_status = params["status"]
+        reopen = (
+            isinstance(requested_status, AccountStatus)
+            and requested_status != AccountStatus.ACTIVE
+        )
+        if reopen:
+            params["status"] = AccountStatus.ACTIVE
+        account = cls(**params)
+        if initial_balance is not None:
+            account._balance = initial_balance
+        else:
+            account.deposit(Decimal("100.00"))
+        if reopen:
+            account.status = requested_status
+        return account
 
     return _make

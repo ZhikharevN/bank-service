@@ -17,7 +17,7 @@ class PremiumAccount(BankAccount):
         new_balance = self.balance - amount - self.commission
         if new_balance < -self.overdraft_limit:
             raise InsufficientFundsError()
-        self.balance = new_balance
+        self._balance = new_balance
 
     def get_account_info(self) -> dict:
         info = super().get_account_info()
@@ -29,4 +29,4 @@ class PremiumAccount(BankAccount):
 
     def __str__(self) -> str:
         return (f"Type: {self.type}, status: {self.status}, balance: {self.balance}, currency: {self.currency}, "
-                f"overdraft_limit: {self.overdraft_limit}, commission: {self.commission}")
+                f"overdraft_limit: {self.overdraft_limit}, commission: {self.commission}, number: {self.number[-4:]}")
