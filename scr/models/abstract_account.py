@@ -16,7 +16,7 @@ class AbstractAccount(ABC):
     type: AccountType
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     status: AccountStatus = AccountStatus.ACTIVE
-    balance: Decimal = field(default=Decimal('0.00'), repr=False)
+    balance: Decimal = field(default=Decimal('0.00'), init=False, repr=False)
 
     def deposit(self, amount):
         self._validate_status()

@@ -1,7 +1,9 @@
 from contextlib import contextmanager
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
+
 from scr.audit.audit_report_service import AuditReportService
 from scr.enums.client_status import ClientStatus
 from scr.enums.currency import Currency
@@ -10,6 +12,8 @@ from scr.models.bank_account import BankAccount
 from scr.models.client import Client
 from scr.models.premium_account import PremiumAccount
 from scr.models.savings_account import SavingsAccount
+from scr.services.report_builder import ReportBuilder
+from scr.services.report_service import ReportService
 
 DAYTIME = datetime(2026, 8, 29, 12, 0)
 NIGHT = datetime(2026, 8, 29, 2, 0)
@@ -47,23 +51,23 @@ def _drain(bank: Bank, times: int) -> None:
 
 
 # Демонстрация
-def demonstration_day_6() -> None:
+def demonstration() -> None:
     bank = Bank(fx_rates={(Currency.USD, Currency.RUB): Decimal("30")})
 
-    ivan_main = BankAccount(currency=Currency.RUB, balance=Decimal("50000.00"))
-    ivan_extra = BankAccount(currency=Currency.RUB, balance=Decimal("5000.00"))
-    maria_save = SavingsAccount(currency=Currency.RUB, balance=Decimal("15000.00"))
-    maria_card = BankAccount(currency=Currency.RUB, balance=Decimal("2000.00"))
-    petr_prem = PremiumAccount(currency=Currency.RUB, balance=Decimal("8000.00"))
-    olga_vip = BankAccount(currency=Currency.RUB, balance=Decimal("250000.00"))
-    olga_pocket = BankAccount(currency=Currency.RUB, balance=Decimal("500.00"))
-    sergey_big = BankAccount(currency=Currency.RUB, balance=Decimal("25000.00"))
-    sergey_small = BankAccount(currency=Currency.RUB, balance=Decimal("3000.00"))
-    anna_main = BankAccount(currency=Currency.RUB, balance=Decimal("1000.00"))
-    anna_save = SavingsAccount(currency=Currency.RUB, balance=Decimal("4000.00"))
-    dmitry_main = BankAccount(currency=Currency.RUB, balance=Decimal("10000.00"))
-    elena_a = BankAccount(currency=Currency.RUB, balance=Decimal("2000.00"))
-    elena_b = BankAccount(currency=Currency.RUB, balance=Decimal("7000.00"))
+    ivan_main = BankAccount(currency=Currency.RUB)
+    ivan_extra = BankAccount(currency=Currency.RUB)
+    maria_save = SavingsAccount(currency=Currency.RUB)
+    maria_card = BankAccount(currency=Currency.RUB)
+    petr_prem = PremiumAccount(currency=Currency.RUB)
+    olga_vip = BankAccount(currency=Currency.RUB)
+    olga_pocket = BankAccount(currency=Currency.RUB)
+    sergey_big = BankAccount(currency=Currency.RUB)
+    sergey_small = BankAccount(currency=Currency.RUB)
+    anna_main = BankAccount(currency=Currency.RUB)
+    anna_save = SavingsAccount(currency=Currency.RUB)
+    dmitry_main = BankAccount(currency=Currency.RUB)
+    elena_a = BankAccount(currency=Currency.RUB)
+    elena_b = BankAccount(currency=Currency.RUB)
 
     ivan = _client("Ivan", "Sidorov", [ivan_main, ivan_extra], n=1)
     maria = _client("Maria", "Orlova", [maria_save, maria_card], n=2)
@@ -85,6 +89,26 @@ def demonstration_day_6() -> None:
     accounts = [acc for client in clients for acc in client.accounts]
     queued = 0
     with at(DAYTIME):
+        opening = [
+            (ivan, ivan_main, "50000.00"),
+            (ivan, ivan_extra, "5000.00"),
+            (maria, maria_save, "15000.00"),
+            (maria, maria_card, "2000.00"),
+            (petr, petr_prem, "8000.00"),
+            (olga, olga_vip, "250000.00"),
+            (olga, olga_pocket, "500.00"),
+            (sergey, sergey_big, "25000.00"),
+            (sergey, sergey_small, "3000.00"),
+            (anna, anna_main, "1000.00"),
+            (anna, anna_save, "4000.00"),
+            (dmitry, dmitry_main, "10000.00"),
+            (elena, elena_a, "2000.00"),
+            (elena, elena_b, "7000.00"),
+        ]
+        for client, account, amount in opening:
+            bank.submit_deposit(client, account, Decimal(amount))
+            queued += 1
+
         for amount in ("200.00", "350.00", "80.00", "120.00", "45.00"):
             bank.submit_deposit(ivan, ivan_extra, Decimal(amount))
             queued += 1
@@ -108,7 +132,6 @@ def demonstration_day_6() -> None:
         queued += 5
         bank.submit_withdraw(olga, olga_vip, Decimal("100000.00"))
         bank.submit_withdraw(olga, olga_vip, Decimal("120000.00"))
-        bank.submit_deposit(olga, olga_vip, Decimal("100000.00"))
         bank.submit_withdraw(sergey, sergey_big, Decimal("15000.00"))
         bank.submit_withdraw(sergey, sergey_big, Decimal("13000.00"))
         queued += 5
@@ -141,6 +164,7 @@ def demonstration_day_6() -> None:
 
     errors = AuditReportService.error_stats(bank)
     suspicious = AuditReportService.suspicious_by_reason(bank)
+
     print("Clients and accounts:")
     for client in clients:
         print(f"clients={client} accounts={client.accounts}")
@@ -151,4 +175,34 @@ def demonstration_day_6() -> None:
     for reason, txs in suspicious.items():
         print(f"  {reason}: {len(txs)}")
 
-demonstration_day_6()
+    # Пример отчетов
+    reports_dir = Path(__file__).resolve().parent.parent / "reports"
+    client_report = ReportBuilder.for_client(olga)
+    bank_report = ReportBuilder.for_bank(bank)
+    risk_report = ReportBuilder.for_risks(bank)
+    print(client_report.to_text())
+    print(f"client json: {client_report.export_to_json(reports_dir / 'client_olga.json')}")
+    print(f"client json: {client_report.export_to_csv(reports_dir / 'client_olga')}")
+    print(f"client json: {client_report.to_text()}")
+    print(f"bank csv: {bank_report.export_to_csv(reports_dir / 'bank')}")
+    print(f"risk json: {risk_report.export_to_json(reports_dir / 'risks.json')}")
+    print(f"risk csv: {risk_report.export_to_csv(reports_dir / 'risk')}")
+
+    # Пример колоночного графика по клиентам и их балансу
+    name_to_balance = {
+           f"{client.last_name} {client.first_name}": client.get_sum_balance()
+           for client in bank.clients
+    }
+    ReportService.bar_chart(name_to_balance)
+
+    # Пример графика изменения баланса
+    ReportService.change_balance(olga.history)
+
+    # Пример круговой диаграммы
+    name_to_balance = {
+        f"{client.last_name} {client.first_name}": float(client.get_sum_balance())
+        for client in bank.clients
+    }
+    ReportService.pie_chart(name_to_balance)
+ 
+demonstration()
